@@ -1,0 +1,4 @@
+Building DAG of jobs...
+WildcardError in line 24 of /Users/konstantin/Documents/Courses/Calculations/Snakemake/hard/Snakefile:
+Wildcards in input files cannot be determined from output files:
+'file'

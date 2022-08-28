@@ -1,0 +1,66 @@
+class: CommandLineTool
+cwlVersion: v1.0
+baseCommand: ["sh", "example.sh"]
+
+requirements:
+  InitialWorkDirRequirement:
+    listing:
+      - entryname: example.sh
+        entry: |-
+          NAME=`cat $(inputs.file.path)`
+          printf "Hello \${NAME}!"
+
+inputs:
+  file:
+    type: File
+    inputBinding:
+      position: 1
+
+outputs:
+  output:
+    type: stdout
+
+stdout: $(inputs.file.basename)class: ExpressionTool
+cwlVersion: v1.0
+
+requirements:
+  - class: InlineJavascriptRequirement
+
+inputs:
+  input_dir: Directory
+
+outputs:
+  outfiles: File[]
+
+expression: |
+  ${
+    var file_array = inputs.input_dir.listing;
+    return { "outfiles": file_array.filter(function(file) {return !/^\./.test(file.basename)})};
+  }class: Workflow
+cwlVersion: v1.0
+
+requirements:
+  ScatterFeatureRequirement: {}
+
+inputs:
+  input_dir: Directory
+
+outputs:
+  output: 
+    type: File[]
+    outputSource: cat/output
+
+steps:
+  get:
+    run: get.cwl
+    in:
+      input_dir: input_dir
+    out:
+      [outfiles]
+  cat:
+    scatter: file
+    run: cat.cwl
+    in:
+      file: get/outfiles
+    out:
+      [output]

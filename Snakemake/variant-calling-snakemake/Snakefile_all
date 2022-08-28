@@ -1,0 +1,103 @@
+IDS, = glob_wildcards('input/{file,\w+.*\.bam}')
+
+rule all:
+    input: expand('output/results/{file}_counted_h_s', file=IDS)
+    output: touch('.status')
+
+rule count_all:
+    input:
+        f = "output/freebayes/{file}.vcf",
+        h = "output/haplotype_caller/{file}.vcf",
+        s = "output/samtools/{file}.vcf",
+        f_h = "output/intersected/{file}_f_h.vcf.gz",
+        f_s = "output/intersected/{file}_f_s.vcf.gz",
+        h_s = "output/intersected/{file}_f_s.vcf.gz"
+    output:
+        f_o = "output/results/{file}_counted_f",
+        h_o = "output/results/{file}_counted_o",
+        s_o = "output/results/{file}_counted_s",
+        f_h_o = "output/results/{file}_counted_f_h",
+        f_s_o = "output/results/{file}_counted_f_s",
+        h_s_o = "output/results/{file}_counted_h_s"
+    run:
+        shell("vcftools --vcf {input.f} 2> {output.f_o}")
+        shell("vcftools --vcf {input.h} 2> {output.h_o}")
+        shell("vcftools --vcf {input.s} 2> {output.s_o}")
+        shell("vcftools --vcf {input.f_h} 2> {output.f_h_o}")
+        shell("vcftools --vcf {input.f_s} 2> {output.f_s_o}")
+        shell("vcftools --vcf {input.h_s} 2> {output.h_s_o}")
+
+rule intersect:
+    input:
+        freebayes = "output/freebayes/{file}.vcf.gz",
+        haplotypecaller = "output/haplotype_caller/{file}.vcf.gz",
+        samtools = "output/samtools/{file}.vcf.gz"
+    output:
+        f_h = "output/intersected/{file}_f_h.vcf.gz",
+        f_s = "output/intersected/{file}_f_s.vcf.gz",
+        h_s = "output/intersected/{file}_h_s.vcf.gz"
+    run:
+        shell("vcf-isec -f -n +2 {input.freebayes} {input.haplotypecaller} | bgzip -c > {output.f_h}")
+        shell("vcf-isec -f -n +2 {input.freebayes} {input.samtools} | bgzip -c > {output.f_s}")
+        shell("vcf-isec -f -n +2 {input.haplotypecaller} {input.samtools} | bgzip -c > {output.h_s}")
+
+rule index_all:
+    input:
+        samtools = "output/samtools/{file}.vcf",
+        freebayes = "output/freebayes/{file}.vcf",
+        haplotype_caller = "output/haplotype_caller/{file}.vcf"
+    output:
+        samtools_o = "output/samtools/{file}.vcf.gz",
+        freebayes_o = "output/freebayes/{file}.vcf.gz",
+        haplotype_caller_o = "output/haplotype_caller/{file}.vcf.gz"
+    run:
+        shell("bgzip {input.samtools}")
+        shell("tabix -p vcf {output.samtools_o}")
+        shell("bgzip {input.freebayes}")
+        shell("tabix -p vcf {output.freebayes_o}")
+        shell("bgzip {input.haplotype_caller}")
+        shell("tabix -p vcf {output.haplotype_caller_o}")
+
+rule samtools:
+    input:
+        file = "input/{file}",
+        fasta = "data/22.fa",
+        index = "data/22.fai",
+        dic = "data/22.dict"
+    output: "output/samtools/{file}.vcf"
+    shell: "samtools mpileup -uf {input.fasta} {input.file} | bcftools view -vcg - > {output}"
+
+rule freebayes:
+    input:
+        file = "input/{file}",
+        fasta = "data/22.fa",
+        index = "data/22.fai",
+        dic = "data/22.dict"
+    output: "output/freebayes/{file}.vcf"
+    shell: "freebayes -f {input.fasta} {input.file} > {output}"
+
+rule haplotype_caller:
+    input:
+        file = "input/{file}",
+        fasta = "data/22.fa",
+        index = "data/22.fai",
+        dic = "data/22.dict"
+    output: "output/haplotype_caller/{file}.vcf"
+    shell: "java -jar $GATK -R {input.fasta} -T HaplotypeCaller -I {input.file} -o {output}"
+
+rule index_bam:
+    input: "input/{file}"
+    output: "input/{file}.bai"
+    shell: "samtools index {input}"
+
+rule reference_dict:
+    input:
+        ref = "data/22.fa",
+        index = "data/22.fa.fai"
+    output: "data/22.dict"
+    shell: "java -jar $PICARD CreateSequenceDictionary R={input.index} O={output}"
+
+rule reference_index:
+    input: "data/22.fa"
+    output: "data/22.fa.fai"
+    shell: "samtools faidx {input}"

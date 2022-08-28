@@ -1,0 +1,21 @@
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 1 (use --cores to define parallelism)
+Rules claiming more threads will be scaled down.
+Job counts:
+	count	jobs
+	1	all
+	1	vc_haplotypecaller
+	2
+Select jobs to execute...
+
+[Thu Aug 11 15:28:09 2022]
+rule vc_haplotypecaller:
+    input: data/22.fa, data/22.fa.fai, data/22.dict, input/170172.bam, input/170172.bam.bai
+    output: output/vc/170172_h.vcf
+    jobid: 1
+    wildcards: file=170172
+
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: /Users/konstantin/Documents/Courses/Calculations/Snakemake/hard/.snakemake/log/2022-08-11T152808.750019.snakemake.log

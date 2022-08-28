@@ -1,0 +1,141 @@
+IDS, = glob_wildcards('input/{file}.bam')
+
+
+def prepare_report(files, output):
+    import re
+
+    numbers = []
+    for file in files:
+        with open(file) as f:
+            f = f.read()
+            numbers.append(re.findall(r'possible (\d+) ',f)[0])
+
+    with open(output,'w') as f:
+        f.write(numbers[0] + "\t" + numbers[3] + "\t" + numbers[4] + "\n" +
+                numbers[1] + "\t" + 'None' + "\t" + numbers[5] + "\n" +
+                numbers[2] + "\t" + 'None' + "\t" + 'None' + "\n")
+
+
+rule all:
+    input: expand('output/reports/{file}', file=IDS)
+    output: touch('.status')
+
+rule make_result:
+    input:
+        f = "output/count/{file}_f",
+        h = "output/count/{file}_h",
+        s = "output/count/{file}_s",
+        f_h = "output/count/{file}_f_h",
+        f_s = "output/count/{file}_f_s",
+        h_s = "output/count/{file}_h_s"
+    output:
+        report = "output/reports/{file}"
+    run:
+        prepare_report([input.f, input.h, input.s, input.f_h, input.f_s, input.h_s], output.report)
+
+rule count_individual_variants:
+    input:
+        f = "output/vc/{file}_f.vcf.gz",
+        h = "output/vc/{file}_h.vcf.gz",
+        s = "output/vc/{file}_s.vcf.gz"
+    output:
+        f_c = "output/count/{file}_f",
+        h_c = "output/count/{file}_h",
+        s_c = "output/count/{file}_s"
+    run:
+        shell("vcftools --gzvcf {input.f} 2> {output.f_c}")
+        shell("vcftools --gzvcf {input.h} 2> {output.h_c}")
+        shell("vcftools --gzvcf {input.s} 2> {output.s_c}")
+
+rule count_intersected_variants:
+    input:
+        f_h = "output/vc/{file}_f_h.vcf.gz",
+        f_s = "output/vc/{file}_f_s.vcf.gz",
+        h_s = "output/vc/{file}_h_s.vcf.gz"
+    output:
+        f_h_c = "output/count/{file}_f_h",
+        f_s_c = "output/count/{file}_f_s",
+        h_s_c = "output/count/{file}_h_s"
+    run:
+        shell("vcftools --gzvcf {input.f_h} 2> {output.f_h_c}")
+        shell("vcftools --gzvcf {input.f_s} 2> {output.f_s_c}")
+        shell("vcftools --gzvcf {input.h_s} 2> {output.h_s_c}")
+
+rule intersect_vcf:
+    input:
+        f = "output/vc/{file}_f.vcf.gz",
+        h = "output/vc/{file}_h.vcf.gz",
+        s = "output/vc/{file}_s.vcf.gz"
+    output:
+        f_h = "output/vc/{file}_f_h.vcf.gz",
+        f_s = "output/vc/{file}_f_s.vcf.gz",
+        h_s = "output/vc/{file}_h_s.vcf.gz"
+    run:
+        shell("vcf-isec -f -n +2 {input.f} {input.h} | bgzip -c > {output.f_h}")
+        shell("vcf-isec -f -n +2 {input.f} {input.s} | bgzip -c > {output.f_s}")
+        shell("vcf-isec -f -n +2 {input.h} {input.s} | bgzip -c > {output.h_s}")
+
+rule index_vcf:
+    input:
+        f = "output/vc/{file}_f.vcf",
+        h = "output/vc/{file}_h.vcf",
+        s = "output/vc/{file}_s.vcf"
+    output:
+        f_o = "output/vc/{file}_f.vcf.gz",
+        h_o = "output/vc/{file}_h.vcf.gz",
+        s_o = "output/vc/{file}_s.vcf.gz"
+    run:
+        shell("bgzip {input.s}")
+        shell("tabix -p vcf {output.s_o}")
+        shell("bgzip {input.f}")
+        shell("tabix -p vcf {output.f_o}")
+        shell("bgzip {input.h}")
+        shell("tabix -p vcf {output.h_o}")
+
+rule vc_freebayes:
+    input:
+        ref = "data/22.fa",
+        index = "data/22.fa.fai",
+        bam = "input/{file}.bam"
+    output:
+        f = "output/vc/{file}_f.vcf"
+    run:
+        shell("freebayes -f {input.ref} {input.bam} > {output.f}")
+
+rule vc_samtools:
+    input:
+        ref = "data/22.fa",
+        index = "data/22.fa.fai",
+        bam = "input/{file}.bam"
+    output:
+        s = "output/vc/{file}_s.vcf"
+    run:
+        shell("samtools mpileup -uf {input.ref} {input.bam} | bcftools view -vcg - > {output.s}")
+
+rule vc_haplotypecaller:
+    input:
+        ref = "data/22.fa",
+        index = "data/22.fa.fai",
+        dic = "data/22.dict",
+        bam = "input/{file}.bam",
+        bai = "input/{file}.bam.bai"
+    output:
+        h = "output/vc/{file}_h.vcf"
+    run:
+        shell("java -jar $GATK -R {input.ref} -T HaplotypeCaller -I {input.bam} -o {output.h}")
+
+rule index_bam:
+    input: "input/{file}.bam"
+    output: "input/{file}.bam.bai"
+    shell: "samtools index {input}"
+
+rule reference_dict:
+    input:
+        ref = "data/22.fa"
+    output: "data/22.dict"
+    shell: "java -jar $PICARD CreateSequenceDictionary R={input.ref} O={output}"
+
+rule reference_index:
+    input: "data/22.fa"
+    output: "data/22.fa.fai"
+    shell: "samtools faidx {input}"

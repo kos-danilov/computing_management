@@ -1,0 +1,4 @@
+Building DAG of jobs...
+MissingInputException in line 36 of /Users/konstantin/Documents/Courses/Calculations/Snakemake/hard/Snakefile:
+Missing input files for rule reference_index:
+data/22.fa

@@ -1,0 +1,454 @@
+cwlVersion: v1.0
+class: CommandLineTool
+
+requirements:
+  InitialWorkDirRequirement:
+    listing: [$(inputs.bcf)]
+
+baseCommand: []
+
+arguments:
+  - bcftools 
+  - view 
+  - -vcg
+  - $(inputs.bcf.basename)
+
+inputs:
+  bcf:
+    type: File
+
+outputs:
+  vcf:
+    type: stdout
+      
+stdout: variants_samtools.vcfcwlVersion: v1.0
+class: CommandLineTool
+
+requirements:
+  InitialWorkDirRequirement:
+    listing: [$(inputs.bam)]
+
+baseCommand: []
+
+arguments:
+  - samtools
+  - index
+  - $(inputs.bam.basename)
+
+inputs:
+  bam:
+    type: File
+
+outputs:
+  bam_with_index:
+    type: File
+    secondaryFiles:
+      - .bai
+    outputBinding:
+      glob: $(inputs.bam.basename)
+
+#   bam_index:
+#     type: File
+#     outputBinding: 
+#       glob: $(inputs.bam.basename).baicwlVersion: v1.0
+class: Workflow
+
+inputs:
+  variants: File
+
+outputs:
+#   variants_compressed:
+#     type: File
+#     outputSource: gunzip/variants_compressed
+  variants_sorted:
+    type: File
+    outputSource: index/variants_sorted
+
+steps:
+  gunzip:
+    run: 
+      class: CommandLineTool
+
+      requirements:
+        ShellCommandRequirement: {}
+        InitialWorkDirRequirement:
+          listing: [$(inputs.variants)]
+
+      arguments:
+        - valueFrom: "bgzip $(inputs.variants.basename)"
+          shellQuote: false
+
+      inputs:
+        variants:
+          type: File
+        
+      outputs:
+        variants_compressed:
+          type: File
+          outputBinding:
+            glob: $(inputs.variants.basename).gz
+
+    in:
+      variants: variants
+
+    out: [variants_compressed]
+
+  index:
+    run: 
+      class: CommandLineTool
+
+      requirements:
+        ShellCommandRequirement: {}
+        InitialWorkDirRequirement:
+          listing: [$(inputs.variants_compressed)]
+
+      arguments:
+        - valueFrom: "tabix -p vcf $(inputs.variants_compressed.basename)"
+          shellQuote: false
+
+      inputs:
+        variants_compressed:
+          type: File
+        
+      outputs:
+        variants_sorted:
+          type: File
+          outputBinding:
+            glob: $(inputs.variants_compressed.basename)
+          secondaryFiles:
+            - .tbi
+      
+    in:
+      variants_compressed: gunzip/variants_compressed
+    out: [variants_sorted]cwlVersion: v1.0
+class: CommandLineTool
+
+requirements:
+  ShellCommandRequirement: {}
+  InitialWorkDirRequirement:
+    # listing: [$(inputs.v_samtools), $(inputs.v_freebayes), $(inputs.v_haplotypecaller)]
+    listing: [$(inputs.variants)]
+
+
+# baseCommand: []
+baseCommand: ["vcf-isec", "-f", "-n", "+2"]
+
+# arguments:
+#   - valueFrom: "vcf-isec -f -n +2 $(inputs.variants.basename)"
+#     shellQuote: false
+
+# arguments:
+#   - valueFrom: "vcf-isec -f -n +2 $(inputs.v_samtools.basename) $(inputs.v_freebayes.basename) $(inputs.v_haplotypecaller.basename)"
+#     shellQuote: false
+
+inputs:
+  variants:
+    type: File[]
+    secondaryFiles:
+      - .tbi
+    inputBinding:
+      position: 1
+#   v_samtools:
+#     type: File
+#     secondaryFiles:
+#     - .tbi
+#   v_freebayes:
+#     type: File
+#     secondaryFiles:
+#     - .tbi
+#   v_haplotypecaller:
+#     type: File
+#     secondaryFiles:
+#     - .tbi
+
+outputs:
+  common_variants:
+    type: stdout
+
+stdout: common_variants.vcf
+cwlVersion: v1.0
+class: CommandLineTool
+
+requirements:
+  InitialWorkDirRequirement:
+    listing: [$(inputs.reference)]
+
+baseCommand: []
+
+arguments:
+  - samtools
+  - faidx
+  - $(inputs.reference.basename)
+
+inputs:
+  reference:
+    type: File
+
+outputs:
+  reference_with_index:
+    type: File
+    secondaryFiles:
+      - .fai
+    outputBinding:
+      glob: $(inputs.reference.basename)
+
+  # reference_index:
+  #   type: File
+  #   outputBinding:
+  #     glob: $(inputs.reference.basename).faicwlVersion: v1.0
+class: CommandLineTool
+
+requirements:
+  InitialWorkDirRequirement:
+    listing: [$(inputs.reference)]
+
+baseCommand: []
+
+arguments:
+  - java
+  - -jar
+  - /opt/picard/picard.jar
+  - CreateSequenceDictionary
+  - R=$(inputs.reference.basename)
+  - O=$(inputs.reference.nameroot).dict
+
+inputs:
+  reference:
+    type: File
+
+outputs:
+  reference_dic:
+    type: File
+    outputBinding: 
+      glob: $(inputs.reference.nameroot).dictclass: Workflow
+cwlVersion: v1.0
+
+requirements:
+  ScatterFeatureRequirement: {}
+  MultipleInputFeatureRequirement: {}
+  SubworkflowFeatureRequirement: {}
+
+inputs:
+  input_bam: File
+  reference_genome: File
+
+outputs:
+  # reference_index:
+  #   type: File
+  #   outputSource: ref_index/reference_with_index
+
+  # ref_dict:
+  #   type: File
+  #   outputSource: ref_dict/reference_dic
+
+  # bam_index:
+  #   type: File
+  #   outputSource: bam_index/bam_with_index
+
+  # variants_samtools:
+  #   type: File
+  #   outputSource: samtools/variants_samtools
+
+  # variants_samtools_vcf:
+  #   type: File
+  #   outputSource: bcf2vcf/vcf
+
+  # variants_freebayes:
+  #   type: File
+  #   outputSource: freebayes/variants_freebayes
+
+  # variants_haplotype_caller:
+  #   type: File
+  #   outputSource: haplotype_caller/variants_haplotype_caller
+
+  # variants_index:
+  #   type: File[]
+  #   outputSource: [variants_index/variants_sorted]
+
+  # variants_intersected:
+  #   type: File
+  #   outputSource: [intersect/common_variants]
+
+  counted:
+    type: File
+    outputSource: [count/counted]
+
+
+steps:
+  ref_index:
+    run: ref_index.cwl
+    in:
+      reference: reference_genome
+    out: [reference_with_index]
+  
+  ref_dict:
+    run: sequence_dic.cwl
+    in:
+      reference: reference_genome
+    out: [reference_dic]
+
+  bam_index:
+    run: index_bam.cwl
+    in:
+      bam: input_bam
+    out: [bam_with_index]
+
+  samtools:
+    run: vc_samtools.cwl
+    in:
+      bam: bam_index/bam_with_index
+      reference: ref_index/reference_with_index
+    out: [variants_samtools]
+
+  bcf2vcf:
+    run: bcf2vcf.cwl
+    in:
+      bcf: samtools/variants_samtools
+    out: [vcf]
+
+  freebayes:
+    run: vc_freebayes.cwl
+    in:
+      bam: bam_index/bam_with_index
+      reference: ref_index/reference_with_index
+    out: [variants_freebayes]
+
+  haplotype_caller:
+    run: vc_haplotype_caller.cwl
+    in:
+      bam: bam_index/bam_with_index
+      reference: ref_index/reference_with_index
+      dict: ref_dict/reference_dic
+    out: [variants_haplotype_caller]
+
+  variants_index:
+    run: index_variants.cwl
+    scatter: variants
+    in:
+      variants: [bcf2vcf/vcf, freebayes/variants_freebayes, haplotype_caller/variants_haplotype_caller]
+    out: [variants_sorted]
+
+  intersect:
+    run: intersect_variants.cwl
+    in:
+      variants: variants_index/variants_sorted
+    out: [common_variants]
+
+  count:
+    run:
+      class: CommandLineTool
+
+      requirements:
+        ShellCommandRequirement: {}
+        InitialWorkDirRequirement:
+          listing: [$(inputs.common_variants), $(inputs.name)]
+
+      
+      arguments:
+        - valueFrom: "grep '^[^#]' -c $(inputs.common_variants.basename)"
+          shellQuote: false
+
+      inputs:
+        common_variants: File
+        name: File
+      
+      outputs:
+        counted:
+          type: stdout
+      
+      stdout: $(inputs.name.nameroot)_count.txt
+
+    in:
+      common_variants: intersect/common_variants
+      name: input_bam
+
+    out: [counted]class: CommandLineTool
+cwlVersion: v1.0
+
+requirements:
+  InitialWorkDirRequirement:
+    listing: [$(inputs.reference), $(inputs.bam)]
+
+baseCommand: []
+
+arguments:
+  - freebayes
+  - -f
+
+inputs:
+  reference:
+    type: File
+    secondaryFiles:
+      - .fai
+    inputBinding:
+      position: 1
+  bam:
+    type: File
+    secondaryFiles:
+      - .bai
+    inputBinding:
+      position: 2
+
+outputs:
+  variants_freebayes:
+    type: stdout
+
+stdout: variants_freebayes.vcfclass: CommandLineTool
+cwlVersion: v1.0
+
+requirements:
+  ShellCommandRequirement: {}
+  InitialWorkDirRequirement:
+    listing: [$(inputs.reference), $(inputs.bam), $(inputs.dict)]
+
+baseCommand: []
+
+arguments:
+  - valueFrom: "java -jar /opt/gatk/GenomeAnalysisTK.jar -R $(inputs.reference.basename) -T HaplotypeCaller -I $(inputs.bam.basename) -o variants_haplotype_caller.vcf"
+    shellQuote: false
+
+inputs:
+  reference:
+    type: File
+    secondaryFiles:
+      - .fai
+  bam:
+    type: File
+    secondaryFiles:
+      - .bai
+  dict:
+    type: File
+
+outputs:
+  variants_haplotype_caller:
+    type: File
+    outputBinding: 
+      glob: variants_haplotype_caller.vcfclass: CommandLineTool
+cwlVersion: v1.0
+
+requirements:
+  ShellCommandRequirement: {}
+  InitialWorkDirRequirement:
+    listing: [$(inputs.reference), $(inputs.bam)]
+
+baseCommand: []
+
+arguments:
+  - valueFrom: "samtools mpileup -uf $(inputs.reference.basename) $(inputs.bam.basename)"
+    shellQuote: false
+
+inputs:
+  reference:
+    type: File
+    secondaryFiles:
+      - .fai
+  bam:
+    type: File
+    secondaryFiles:
+      - .bai
+
+outputs:
+  variants_samtools:
+    type: stdout
+
+stdout: variants_samtools.bcf

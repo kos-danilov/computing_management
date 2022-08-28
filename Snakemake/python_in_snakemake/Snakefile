@@ -1,0 +1,26 @@
+import collections
+
+IDS, = glob_wildcards('input/{file,\w+}')
+
+rule all:
+    input: expand('output/{file}', file=IDS)
+    output: touch('.status')
+
+rule count:
+    input: 'input/{file}'
+    output: 'output/{file}'
+    run:
+    	f = open(str(input))
+    	string = f.read().lower().replace(' ', '').replace('.', '').replace('\n', '')
+    	dic = {}
+    	for i in string:
+    		if i in dic:
+    			dic[i] += 1
+    		else:
+    			dic[i] = 1
+    	odic = collections.OrderedDict(sorted(dic.items()))
+    	with open(str(output), "w") as f:
+    		for key, value in odic.items():
+    			result = str(key) + ": " + str(value) + "\n"
+    			f.write(result)
+    	f.close()
